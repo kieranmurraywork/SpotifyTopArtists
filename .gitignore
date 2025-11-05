@@ -1,4 +1,11 @@
-.env
+# Git
+.git/
 
-.venv
-.git
+# Environment and virtual environments
+.env
+.venv/
+
+# Temporary files
+.cache
+gridnew.jpg
+**Top Song**

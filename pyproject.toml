@@ -12,6 +12,7 @@ dependencies = [
     "dotenv==0.9.9",
     "fonttools==4.60.1",
     "idna==3.11",
+    "imageio[ffmpeg]>=2.37.2",
     "kiwisolver==1.4.9",
     "matplotlib==3.10.7",
     "natsort==8.4.0",

@@ -3,12 +3,13 @@ from main import imageList
 import glob
 import contextlib
 from PIL import Image
-######## The below code returns a broken gif without requiring downloaded images #########
+######## The below code returns an mp4 without requiring downloaded images #########
 i=0
-with imageio.get_writer('movie.gif', mode='I',duration=0.5) as writer:
-    for i in range(len(imageList)) :
-        image = Image.fromarray(imageList[i])
-        writer.append_data(image)
+
+with imageio.get_writer('movie.mp4', mode='I') as writer: # set the format to mp4 importing multiple images
+    for i in range(len(imageList)) : # Loop for appending all images in imageList to the outputted mp4
+        image = imageList[i] # set image to the image in the ith element
+        writer.append_data(image) # append this image to the writer
 
 ###### The below code return a gif but requires downloaded images #############
 # filepaths

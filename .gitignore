@@ -6,6 +6,10 @@
 .venv/
 
 # Temporary files
+__pycache__/
 .cache
+.ruff_cache/
 gridnew.jpg
+image.gif
+movie.mp4
 **Top Song**

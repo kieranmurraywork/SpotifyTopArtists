@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 from dotenv import load_dotenv
 from PIL import Image
 from spotipy.oauth2 import SpotifyOAuth
+import base64
 
 
 def create_spotify_client() -> Spotify:
@@ -19,7 +20,7 @@ def create_spotify_client() -> Spotify:
             client_id=os.getenv("SPOTIFY_CLIENT_ID"),
             client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
             redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
-            scope="playlist-modify-public",
+            scope="playlist-modify-public user-top-read ugc-image-upload playlist-modify-private",
         )
     )
 
@@ -34,7 +35,7 @@ def url_to_image(url) -> cv2.typing.MatLike:
         raise ValueError("cv2.imdecode failed to create an image.")
 
     return image
-def create_playlist(sp, results):
+def create_playlist(sp, results,playlistCover):
     """Create a playlist"""
     username = sp.me()['id']
     track = []
@@ -42,7 +43,9 @@ def create_playlist(sp, results):
     for result in results["items"]:
         track.append(result["id"])
     sp.playlist_add_items(playlist["id"],track,position=None)
-
+    with open("Top Song Average New.jpg","rb") as file:
+        cover = base64.b64encode(file.read())
+    sp.playlist_upload_cover_image(playlist["id"], image_b64=cover)
 
 def main():
     from argparse import ArgumentParser
@@ -78,7 +81,6 @@ def main():
     )  # Returns the top songs with the corresponding timeframe up to the limit
     if results is None:
         raise ValueError("sp.current_user_top_tracks failed to generate any results.")
-    create_playlist(sp,results)
     i = 0
     for i, item in enumerate(results["items"]):  # For each track in results:
         url = item["album"]["images"][0]["url"]  # Gets the url for the song's cover art
@@ -139,8 +141,9 @@ def main():
     outputImage = Image.fromarray(
         averages
     )  # create the image from the numpy array averages
-    outputImage.save("Top Song Average New.png")  # save the image as a png
+    outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
     outputImage.show()  # display the image
+    create_playlist(sp, results)
 
 
 if __name__ == "__main__":

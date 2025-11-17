@@ -19,7 +19,7 @@ def create_spotify_client() -> Spotify:
             client_id=os.getenv("SPOTIFY_CLIENT_ID"),
             client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
             redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
-            scope="user-top-read",
+            scope="playlist-modify-public",
         )
     )
 
@@ -34,6 +34,14 @@ def url_to_image(url) -> cv2.typing.MatLike:
         raise ValueError("cv2.imdecode failed to create an image.")
 
     return image
+def create_playlist(sp, results):
+    """Create a playlist"""
+    username = sp.me()['id']
+    track = []
+    playlist = sp.user_playlist_create(name="Top Songs Generated",public=True,user=username)
+    for result in results["items"]:
+        track.append(result["id"])
+    sp.playlist_add_items(playlist["id"],track,position=None)
 
 
 def main():
@@ -68,10 +76,9 @@ def main():
     results = sp.current_user_top_tracks(
         time_range=selected_range, limit=selected_limit
     )  # Returns the top songs with the corresponding timeframe up to the limit
-
     if results is None:
         raise ValueError("sp.current_user_top_tracks failed to generate any results.")
-
+    create_playlist(sp,results)
     i = 0
     for i, item in enumerate(results["items"]):  # For each track in results:
         url = item["album"]["images"][0]["url"]  # Gets the url for the song's cover art
@@ -81,6 +88,7 @@ def main():
         ##### Below line is for placing the name of the song ontop of the cover art #####
         # cv2.putText(img,f"{item['name']}", (0,550),fontFace=2, fontScale=2, color=(255,255,255), thickness=2)
         imageList.append(img.astype("uint8"))  # Adds the current image to imageList
+
 
     # Config:
     images_dir = "./Top Songs"  # Directory for reading the images in for the grid photo

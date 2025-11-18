@@ -1,4 +1,5 @@
 import os
+from io import BytesIO
 from urllib import request
 
 import cv2
@@ -39,13 +40,15 @@ def create_playlist(sp, results,playlistCover):
     """Create a playlist"""
     username = sp.me()['id']
     track = []
-    playlist = sp.user_playlist_create(name="Top Songs Generated",public=True,user=username)
+    playlist = sp.user_playlist_create(name=f"{username}'s Top Songs Generated",public=True,user=username)
     for result in results["items"]:
         track.append(result["id"])
     sp.playlist_add_items(playlist["id"],track,position=None)
-    with open("Top Song Average New.jpg","rb") as file:
-        cover = base64.b64encode(file.read())
-    sp.playlist_upload_cover_image(playlist["id"], image_b64=cover)
+    playlistFile = BytesIO()
+    playlistCover.save(playlistFile, format="jpeg")
+    playlistBytes = playlistFile.getvalue()
+    playlistB64 = base64.b64encode(playlistBytes)
+    sp.playlist_upload_cover_image(playlist["id"], image_b64=playlistB64)
 
 def main():
     from argparse import ArgumentParser
@@ -143,7 +146,7 @@ def main():
     )  # create the image from the numpy array averages
     outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
     outputImage.show()  # display the image
-    create_playlist(sp, results)
+    create_playlist(sp, results,outputImage)
 
 
 if __name__ == "__main__":

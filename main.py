@@ -70,11 +70,19 @@ def main():
         default=50,
         help="Number of tracks to fetch (default: 50)",
     )
+    parser.add_argument(
+        "-p",
+        "--playlist",
+        metavar="playlist",
+        type = bool,
+        default = False,
+        help = "Generate a playlist for the top 50 songs (default: False)")
 
     args = parser.parse_args()
 
     selected_range: str = args.range
     selected_limit: int = args.limit
+    selected_playlist: bool = args.playlist
 
     sp = create_spotify_client()
 
@@ -146,7 +154,8 @@ def main():
     )  # create the image from the numpy array averages
     outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
     outputImage.show()  # display the image
-    create_playlist(sp, results,outputImage)
+    if selected_playlist==True:
+        create_playlist(sp, results,outputImage)
 
 
 if __name__ == "__main__":

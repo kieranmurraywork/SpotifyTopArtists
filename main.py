@@ -3,6 +3,7 @@ from io import BytesIO
 from urllib import request
 
 import cv2
+import imageio
 import numpy as np
 from spotipy import Spotify
 from matplotlib import pyplot as plt
@@ -50,6 +51,25 @@ def create_playlist(sp, results,playlistCover):
     playlistB64 = base64.b64encode(playlistBytes)
     sp.playlist_upload_cover_image(playlist["id"], image_b64=playlistB64)
 
+def create_slideshow(imageList):
+    i = 0
+    with imageio.get_writer('movie.mp4', mode='I') as writer:  # set the format to mp4 importing multiple images
+        for i in range(len(imageList)):  # Loop for appending all images in imageList to the outputted mp4
+            image = imageList[i]  # set image to the image in the ith element
+            #writer.append_data(image)  # append this image to the writer
+            new_image = Image.fromarray(image)
+            if i == 0:
+                writer.append_data(image)
+                prev_image = new_image
+            else:
+                prev_image = Image.fromarray(imageList[i-1])
+            alpha = 0
+            while 1.0 > alpha:
+                new_img = Image.blend(prev_image, new_image, alpha)
+                new_img = np.array(new_img)
+                alpha = alpha + 0.3
+                writer.append_data(new_img)
+
 def main():
     from argparse import ArgumentParser
 
@@ -76,13 +96,23 @@ def main():
         metavar="playlist",
         type = bool,
         default = False,
-        help = "Generate a playlist for the top 50 songs (default: False)")
+        help = "Generate a playlist for the top 50 songs (default: False)"
+    )
+    parser.add_argument(
+        "-s",
+        "--slideshow",
+        metavar="slideshow",
+        type = bool,
+        default = False,
+        help = "Generate a slideshow for the top 50 songs (default: False)",
+    )
 
     args = parser.parse_args()
 
     selected_range: str = args.range
     selected_limit: int = args.limit
     selected_playlist: bool = args.playlist
+    selected_slideshow: bool = args.slideshow
 
     sp = create_spotify_client()
 
@@ -154,8 +184,10 @@ def main():
     )  # create the image from the numpy array averages
     outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
     outputImage.show()  # display the image
-    if selected_playlist==True:
+    if selected_playlist:
         create_playlist(sp, results,outputImage)
+    if selected_slideshow:
+        create_slideshow(imageList)
 
 
 if __name__ == "__main__":

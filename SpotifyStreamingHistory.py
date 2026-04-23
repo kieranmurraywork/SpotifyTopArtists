@@ -7,7 +7,7 @@ import numpy as np
 import requests
 from PIL import Image
 
-from main import create_spotify_client, url_to_image
+from main import create_spotify_client, url_to_image, create_playlist
 
 from matplotlib import pyplot as plt
 import pandas as pd
@@ -105,14 +105,17 @@ def main():
 
     if selected_type == "songs":
         imageList = []
+        uriList = []
         print("---- Top Songs ----")
         top_list = topSongs(song_pairs,selected_range)
         for song,count in top_list:
-            #print(song[0], count)
+            print(song[0], count)
             cover = sp.track(song[2])
             url = cover["album"]["images"][0]["url"]
             img = url_to_image(url)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             imageList.append(img.astype("uint8"))
+            uriList.append(song[2])
         j = 0  # intialises a counter for moving through the songs
         averages = imageList[
             j
@@ -131,6 +134,7 @@ def main():
         )  # create the image from the numpy array averages
         outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
         outputImage.show()
+        create_playlist(sp, uriList, outputImage,selected_range,selected_year)
 
         df = pd.DataFrame(
             [(song, artist, uri, count) for (song, artist, uri), count in top_list],

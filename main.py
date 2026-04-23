@@ -39,13 +39,25 @@ def url_to_image(url) -> cv2.typing.MatLike:
         raise ValueError("cv2.imdecode failed to create an image.")
 
     return image
-def create_playlist(sp, results,playlistCover):
+def create_playlist(sp, results,playlistCover,range,coverage):
     """Create a playlist"""
     username = sp.me()['id']
     track = []
-    playlist = sp.user_playlist_create(name=f"{username}'s Top Songs Generated",public=True,user=username)
-    for result in results["items"]:
-        track.append(result["id"])
+    tracksList = []
+    if "items" in results:
+        ids = results["items"]
+        for items in ids:
+            tracksList.append(items["id"])
+        playlistName = f"{username}'s Top {range} Songs Generated - {coverage}"
+    else:
+        tracksList = results
+        if coverage == "all":
+            playlistName = f"{username}'s Top {range} Songs of All Time"
+        else:
+            playlistName = f"{username}'s Top {range} Songs of {coverage}"
+    playlist = sp.user_playlist_create(name=playlistName,public=True,user=username)
+    for result in tracksList:
+        track.append(result)
     sp.playlist_add_items(playlist["id"],track,position=None)
     playlistFile = BytesIO()
     playlistCover.save(playlistFile, format="jpeg")
@@ -191,7 +203,7 @@ def main():
     outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
     outputImage.show()  # display the image
     if selected_playlist==True:
-        create_playlist(sp, results,outputImage)
+        create_playlist(sp, results,outputImage,selected_limit,selected_range)
     if selected_slideshow==True:
         create_slideshow(imageList)
 

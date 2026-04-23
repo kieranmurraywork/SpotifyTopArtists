@@ -2,9 +2,14 @@ import json
 import os
 from pprint import pprint
 
-import pykx
+import cv2
+import numpy as np
+import requests
+from PIL import Image
+
+from main import create_spotify_client, url_to_image
+
 from matplotlib import pyplot as plt
-from pykx.toq import from_list
 import pandas as pd
 from collections import Counter
 def topArtists(artists, range):
@@ -15,7 +20,7 @@ def topAlbum(albums, range):
     return Counter(albums).most_common(range)
 def main():
     from argparse import ArgumentParser
-
+    sp = create_spotify_client()
     parser = ArgumentParser(description="See your top songs of a year.")
     parser.add_argument(
         "-t",
@@ -45,7 +50,7 @@ def main():
     selected_year: int = args.year
     selected_type: str = args.type
     selected_range: int = args.range
-    directory = "Streaming History/Spotify Extended Streaming History"
+    directory = "Spotify Extended Streaming History"
     data = []
     artists = []
     songs = []
@@ -76,12 +81,19 @@ def main():
             streams['album'].append(stream['master_metadata_album_album_name'])
             streams['artist'].append(stream['master_metadata_album_artist_name'])
             streams['uri'].append(stream['spotify_track_uri'])
-    song_pairs = list(zip(streams["song"], streams["artist"]))
+    song_pairs = list(zip(streams["song"], streams["artist"], streams["uri"]))
     if selected_type == "artists":
         print("---- Top Artists ----")
         top_list = topArtists(streams['artist'],selected_range)
         for artist, count in top_list:
             print(artist, count)
+        # WIP - figuring out how to display this data properly
+            #artistImage = sp.search(q='artist:' + artist, type='artist')
+            #img = url_to_image(artistImage['artists']['items'][0]['images'][0]['url'])
+            #output = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            #output = Image.fromarray(output)
+            #output.show()
+        df = pd.DataFrame(top_list, columns=["artist", "count"])
         df = pd.DataFrame(top_list, columns=["artist", "count"])
         df.plot.bar(x="artist", y="count", legend=False, figsize=(20, 10))
         plt.title("Top Artists")
@@ -92,13 +104,37 @@ def main():
         plt.show()
 
     if selected_type == "songs":
+        imageList = []
         print("---- Top Songs ----")
         top_list = topSongs(song_pairs,selected_range)
         for song,count in top_list:
-            print(song[0], count)
+            #print(song[0], count)
+            cover = sp.track(song[2])
+            url = cover["album"]["images"][0]["url"]
+            img = url_to_image(url)
+            imageList.append(img.astype("uint8"))
+        j = 0  # intialises a counter for moving through the songs
+        averages = imageList[
+            j
+        ]  # initialises averages to be the numpy array of the first photo
+        while j < selected_range-1:  # While the counter is less than the length of the number of images:
+            readInFile = imageList[j + 1]  # read in the value of the next photo in the list
+            readInFileFixed = np.resize(readInFile, (640, 640, 3))
+            averages = averages.astype(int) + readInFileFixed.astype(int)  # combine the values of both numpy arrays
+            j += 1  # increment j
+        averages = averages / len(
+            imageList
+        )  # find the average by dividing by the number of images
+        averages = averages.astype("uint8")  # convert averages back to uint8
+        outputImage = Image.fromarray(
+            averages
+        )  # create the image from the numpy array averages
+        outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
+        outputImage.show()
+
         df = pd.DataFrame(
-            [(song, artist, count) for (song, artist), count in top_list],
-            columns=["song", "artist", "count"]
+            [(song, artist, uri, count) for (song, artist, uri), count in top_list],
+            columns=["song", "artist", "uri" ,"count"]
         )
         df.plot.bar(x="song", y="count", legend=False, figsize=(20, 10))
         plt.title("Top Songs")

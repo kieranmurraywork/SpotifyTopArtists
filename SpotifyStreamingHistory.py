@@ -15,7 +15,12 @@ from collections import Counter
 def topArtists(artists, range):
     return Counter(artists).most_common(range)
 def topSongs(songs, range):
-    return Counter(songs).most_common(range)
+    uri_map = {}
+    pairs = []
+    for song, artist, uri in songs:
+        uri_map[(song, artist)] = uri
+        pairs.append((song, artist))
+    return Counter(pairs).most_common(range), uri_map
 def topAlbum(albums, range):
     return Counter(albums).most_common(range)
 def main():
@@ -57,11 +62,11 @@ def main():
     albums = []
     for filename in os.listdir(directory):
         if selected_year != "all":
-            if filename.endswith(".json") and str(selected_year) in filename:
+            if filename.endswith(".json") and str(selected_year) in filename and "Video" not in filename:
                 with open(os.path.join(directory, filename), encoding='utf-8') as json_file:
                     data.append(json.load(json_file))
         else:
-            if filename.endswith(".json"):
+            if filename.endswith(".json") and "Video" not in filename:
                 with open(os.path.join(directory, filename), encoding='utf-8') as json_file:
                     data.append(json.load(json_file))
     streams = {
@@ -107,15 +112,15 @@ def main():
         imageList = []
         uriList = []
         print("---- Top Songs ----")
-        top_list = topSongs(song_pairs,selected_range)
+        top_list, uri_map = topSongs(song_pairs,selected_range)
         for song,count in top_list:
             print(song[0], count)
-            cover = sp.track(song[2])
+            cover = sp.track(uri_map[(song[0],song[1])])
             url = cover["album"]["images"][0]["url"]
             img = url_to_image(url)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             imageList.append(img.astype("uint8"))
-            uriList.append(song[2])
+            uriList.append(uri_map[(song[0],song[1])])
         j = 0  # intialises a counter for moving through the songs
         averages = imageList[
             j
@@ -137,8 +142,8 @@ def main():
         create_playlist(sp, uriList, outputImage,selected_range,selected_year)
 
         df = pd.DataFrame(
-            [(song, artist, uri, count) for (song, artist, uri), count in top_list],
-            columns=["song", "artist", "uri" ,"count"]
+            [(song, artist, count) for (song, artist), count in top_list],
+            columns=["song", "artist", "count"]
         )
         df.plot.bar(x="song", y="count", legend=False, figsize=(20, 10))
         plt.title("Top Songs")

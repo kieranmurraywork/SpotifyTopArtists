@@ -1,4 +1,3 @@
-import contextlib
 import os
 from io import BytesIO
 from urllib import request
@@ -12,7 +11,6 @@ from dotenv import load_dotenv
 from PIL import Image
 from spotipy.oauth2 import SpotifyOAuth
 import base64
-import glob
 
 
 def create_spotify_client() -> Spotify:

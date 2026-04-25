@@ -3,10 +3,12 @@ import os
 import cv2
 import numpy as np
 from PIL import Image
+
 from main import create_spotify_client, url_to_image, create_playlist
 from matplotlib import pyplot as plt
 import pandas as pd
 from collections import Counter
+from dateutil.parser import parse
 
 def readInStreams(year): # function to open the Streaming_History_Audio_* files,
     directory = "Spotify Extended Streaming History"
@@ -14,7 +16,7 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
     artists = []
     songs = []
     albums = []
-    for filename in os.listdir(directory):
+    for filename in sorted(os.listdir(directory)):
         if year != "all":
             if filename.endswith(".json") and str(year) in filename and filename.startswith("Streaming_History_Audio"):
                 with open(os.path.join(directory, filename), encoding='utf-8') as json_file:
@@ -27,7 +29,8 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
         "song": [],
         "album": [],
         "artist": [],
-        "uri": []
+        "uri": [],
+        "date": []
     }
     for entry in data:
         for stream in entry:
@@ -41,6 +44,7 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
             streams['album'].append(stream['master_metadata_album_album_name'])
             streams['artist'].append(stream['master_metadata_album_artist_name'])
             streams['uri'].append(stream['spotify_track_uri'])
+            streams['date'].append(stream['ts'])
     song_pairs = list(zip(streams["song"], streams["artist"], streams["uri"]))
     return streams, song_pairs, artists, albums
 
@@ -71,17 +75,20 @@ def topSongs(songs, range, year, sp):
         uri_map[(song, artist)] = uri
         pairs.append((song, artist))
     top_list = Counter(pairs).most_common(range)
+    topSongsList = []
     imageList = []
     uriList = []
-    print("---- Top Songs ----")
     for song, count in top_list:
-        print(song[0], count)
+        topSongsList.append((song[0],count))
         cover = sp.track(uri_map[(song[0], song[1])])
         url = cover["album"]["images"][0]["url"]
         img = url_to_image(url)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         imageList.append(img.astype("uint8"))
         uriList.append(uri_map[(song[0], song[1])])
+    print("---- Top Songs ----")
+    for item in enumerate(topSongsList):
+        print(item[0]+1, item[1][0], item[1][1] )
     j = 0  # intialises a counter for moving through the songs
     averages = imageList[j]  # initialises averages to be the numpy array of the first photo
     while j < range - 1:  # While the counter is less than the length of the number of images:
@@ -121,6 +128,18 @@ def topAlbum(albums, range):
     plt.tight_layout()
     plt.show()
 
+def firstTimePlayed(streams, song, artist):
+    date = ""
+    songs = streams["song"]
+    artists = streams["artist"]
+    dates = streams["date"]
+
+    for i in range(len(songs)):
+        if songs[i].upper() == song.upper() and artists[i].upper() == artist.upper():
+            date = dates[i]
+            return parse(date), songs[i], artists[i]
+    return None
+
 def main():
     from argparse import ArgumentParser
     sp = create_spotify_client()
@@ -149,12 +168,22 @@ def main():
         help="Number of items to show (default: 10)",
         type=int
     )
+    parser.add_argument(
+        "-f",
+        "--first_played",
+        metavar="first_played",
+        nargs=2,
+        default=None,
+    )
     args = parser.parse_args()
     selected_year: int = args.year
     selected_type: str = args.type
     selected_range: int = args.range
+    selected_first_played: int = args.first_played
     streams, song_pairs , artists, albums = readInStreams(selected_year)
-
+    if selected_first_played is not None:
+        date, song, artist = firstTimePlayed(streams, selected_first_played[0], selected_first_played[1])
+        print( str(song) + " by " + str(artist) + " - First Played: " + str(date))
     match selected_type:
         case "artists":
             topArtists(artists, selected_range)

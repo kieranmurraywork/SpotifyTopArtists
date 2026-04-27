@@ -12,6 +12,7 @@ from dateutil.parser import parse
 
 def readInStreams(year): # function to open the Streaming_History_Audio_* files,
     directory = "Spotify Extended Streaming History"
+    videodata = []
     data = []
     artists = []
     songs = []
@@ -21,10 +22,16 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
             if filename.endswith(".json") and str(year) in filename and filename.startswith("Streaming_History_Audio"):
                 with open(os.path.join(directory, filename), encoding='utf-8') as json_file:
                     data.append(json.load(json_file))
+            elif filename.startswith("Streaming_History_Video"):
+                with open(os.path.join(directory, filename), encoding='utf-8') as json_file:
+                    videodata.append(json.load(json_file))
         else:
             if filename.endswith(".json") and filename.startswith("Streaming_History_Audio"):
                 with open(os.path.join(directory, filename), encoding='utf-8') as json_file:
                     data.append(json.load(json_file))
+            elif filename.startswith("Streaming_History_Video"):
+                with open(os.path.join(directory, filename), encoding='utf-8') as json_file:
+                    videodata.append(json.load(json_file))
     streams = {
         "song": [],
         "album": [],
@@ -34,8 +41,8 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
     }
     for entry in data:
         for stream in entry:
-            if stream['master_metadata_track_name'] == None or stream['master_metadata_album_artist_name'] == None or \
-                    stream['master_metadata_album_album_name'] == None:
+            if stream['master_metadata_track_name'] is None or stream['master_metadata_album_artist_name'] is None or \
+                    stream['master_metadata_album_album_name'] is None:
                 continue
             artists.append(stream['master_metadata_album_artist_name'])
             songs.append(stream['master_metadata_track_name'])
@@ -44,6 +51,18 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
             streams['album'].append(stream['master_metadata_album_album_name'])
             streams['artist'].append(stream['master_metadata_album_artist_name'])
             streams['uri'].append(stream['spotify_track_uri'])
+            streams['date'].append(stream['ts'])
+    for entry in videodata:
+        for stream in entry:
+            if stream['master_metadata_track_name'] is None or stream['master_metadata_album_artist_name'] is None or \
+                    stream['master_metadata_album_album_name'] is None:
+                continue
+            artists.append(stream['master_metadata_album_artist_name'])
+            songs.append(stream['master_metadata_track_name'])
+            albums.append(stream['master_metadata_album_album_name'])
+            streams['song'].append(stream['master_metadata_track_name'])
+            streams['album'].append(stream['master_metadata_album_album_name'])
+            streams['artist'].append(stream['master_metadata_album_artist_name'])
             streams['date'].append(stream['ts'])
     song_pairs = list(zip(streams["song"], streams["artist"], streams["uri"]))
     return streams, song_pairs, artists, albums
@@ -101,7 +120,6 @@ def topSongs(songs, range, year, sp):
     outputImage = Image.fromarray(averages)  # create the image from the numpy array averages
     outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
     outputImage.show()
-    create_playlist(sp, uriList, outputImage, range, year)
 
     df = pd.DataFrame(
         [(song, artist, count) for (song, artist), count in top_list],
@@ -114,6 +132,10 @@ def topSongs(songs, range, year, sp):
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     plt.show()
+
+    return uriList, outputImage
+
+
 def topAlbum(albums, range):
     top_list = Counter(albums).most_common(range)
     print("---- Top Albums ----")
@@ -169,6 +191,13 @@ def main():
         type=int
     )
     parser.add_argument(
+        "-p",
+        "--playlist",
+        metavar="playlist",
+        default=False,
+        help="Whether to create a top songs playlist (default: False)",
+    )
+    parser.add_argument(
         "-f",
         "--first_played",
         metavar="first_played",
@@ -180,6 +209,7 @@ def main():
     selected_type: str = args.type
     selected_range: int = args.range
     selected_first_played: int = args.first_played
+    playlist_creation: bool = args.playlist
     streams, song_pairs , artists, albums = readInStreams(selected_year)
     if selected_first_played is not None:
         date, song, artist = firstTimePlayed(streams, selected_first_played[0], selected_first_played[1])
@@ -188,7 +218,9 @@ def main():
         case "artists":
             topArtists(artists, selected_range)
         case "songs":
-            topSongs(song_pairs, selected_range, selected_year, sp)
+            uriList, outputImage = topSongs(song_pairs, selected_range, selected_year, sp)
+            if playlist_creation:
+                create_playlist(sp, uriList, outputImage, selected_range, selected_year)
         case "albums":
             topAlbum(albums, selected_range)
 

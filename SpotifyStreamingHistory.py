@@ -1,5 +1,7 @@
+from datetime import date
 import json
 import os
+from typing import Final
 import cv2
 import numpy as np
 from PIL import Image
@@ -7,6 +9,8 @@ from main import create_spotify_client, url_to_image, create_playlist
 from matplotlib import pyplot as plt
 import pandas as pd
 from collections import Counter
+
+ANALYSIS_START_YEAR: Final[int] = 2014
 
 def readInStreams(year): # function to open the Streaming_History_Audio_* files,
     directory = "Spotify Extended Streaming History"
@@ -137,9 +141,9 @@ def main():
         "-y",
         "--year",
         metavar="year",
-        choices=["2014","2015","2016","2017","2018","2019","2020","2021","2022","2023","2024","2025","2026","all"],
+        choices=list(range(ANALYSIS_START_YEAR, date.today().year)) + ["all"],
         default="all",
-        help="Year to check top songs (default: 2026)",
+        help="Year to check top songs (default: all)",
     )
     parser.add_argument(
         "-r",

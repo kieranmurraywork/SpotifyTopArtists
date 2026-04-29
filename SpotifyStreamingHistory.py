@@ -9,7 +9,6 @@ from matplotlib import pyplot as plt
 import pandas as pd
 from collections import Counter
 from dateutil.parser import parse
-
 def readInStreams(year): # function to open the Streaming_History_Audio_* files,
     directory = "Spotify Extended Streaming History"
     videodata = []
@@ -65,7 +64,8 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
             streams['artist'].append(stream['master_metadata_album_artist_name'])
             streams['date'].append(stream['ts'])
     song_pairs = list(zip(streams["song"], streams["artist"], streams["uri"]))
-    return streams, song_pairs, artists, albums
+    album_pairs = list(zip(streams["album"], streams["artist"]))
+    return streams, song_pairs, artists, album_pairs
 
 def topArtists(artists, range):
     top_list = Counter(artists).most_common(range)
@@ -136,19 +136,11 @@ def topSongs(songs, range, year, sp):
     return uriList, outputImage
 
 
-def topAlbum(albums, range):
+def topAlbum(sp, albums, range):
     top_list = Counter(albums).most_common(range)
     print("---- Top Albums ----")
     for album, count in top_list:
-        print(album, count)
-    df = pd.DataFrame(top_list, columns=["album", "count"])
-    df.plot.bar(x="album", y="count", legend=False, figsize=(20, 10))
-    plt.title("Top Albums")
-    plt.xlabel("Album")
-    plt.ylabel("Streams")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    plt.show()
+        print(str(album[0]) + " " + str(album[1]), count)
 
 def firstTimePlayed(streams, song, artist):
     date = ""
@@ -161,6 +153,18 @@ def firstTimePlayed(streams, song, artist):
             date = dates[i]
             return parse(date), songs[i], artists[i]
     return None
+
+def topAlbumsByArtist(sp, albums, artist_input, range):
+    artist_albums = filter(lambda x: x[1].upper().startswith(artist_input.upper()), albums)
+    topByArtist = Counter(artist_albums).most_common()
+    for album, count in topByArtist:
+        print(str(album[0]) + " " + str(album[1]), count)
+
+def matchingArtists(artist, artist_input):
+    if artist.upper() == artist_input.upper():
+        return True
+    else:
+        return False
 
 def main():
     from argparse import ArgumentParser
@@ -204,13 +208,22 @@ def main():
         nargs=2,
         default=None,
     )
+    parser.add_argument(
+        "-a",
+        "--artist",
+        metavar="artist",
+        default=None,
+        help="Artist to show top albums (default: None)",
+    )
     args = parser.parse_args()
     selected_year: int = args.year
     selected_type: str = args.type
     selected_range: int = args.range
     selected_first_played: int = args.first_played
     playlist_creation: bool = args.playlist
+    album_artist: str = args.artist
     streams, song_pairs , artists, albums = readInStreams(selected_year)
+    topAlbumsByArtist(sp, albums ,album_artist, selected_range)
     if selected_first_played is not None:
         date, song, artist = firstTimePlayed(streams, selected_first_played[0], selected_first_played[1])
         print( str(song) + " by " + str(artist) + " - First Played: " + str(date))
@@ -222,7 +235,7 @@ def main():
             if playlist_creation:
                 create_playlist(sp, uriList, outputImage, selected_range, selected_year)
         case "albums":
-            topAlbum(albums, selected_range)
+            topAlbum(sp, albums, selected_range)
 
 if __name__ == "__main__":
     main()

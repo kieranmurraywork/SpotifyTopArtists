@@ -9,8 +9,9 @@ from matplotlib import pyplot as plt
 import pandas as pd
 from collections import Counter
 from dateutil.parser import parse
+import argparse
 
-def readInStreams(year): # function to open the Streaming_History_Audio_* files,
+def readInStreams(year, ignore): # function to open the Streaming_History_Audio_* files,
     directory = "Spotify Extended Streaming History"
     videodata = []
     data = []
@@ -44,6 +45,8 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
             if stream['master_metadata_track_name'] is None or stream['master_metadata_album_artist_name'] is None or \
                     stream['master_metadata_album_album_name'] is None:
                 continue
+            if stream['master_metadata_album_artist_name'] in ignore:
+                continue
             artists.append(stream['master_metadata_album_artist_name'])
             songs.append(stream['master_metadata_track_name'])
             albums.append(stream['master_metadata_album_album_name'])
@@ -56,6 +59,8 @@ def readInStreams(year): # function to open the Streaming_History_Audio_* files,
         for stream in entry:
             if stream['master_metadata_track_name'] is None or stream['master_metadata_album_artist_name'] is None or \
                     stream['master_metadata_album_album_name'] is None:
+                continue
+            if stream['master_metadata_album_artist_name'] in ignore:
                 continue
             artists.append(stream['master_metadata_album_artist_name'])
             songs.append(stream['master_metadata_track_name'])
@@ -204,13 +209,21 @@ def main():
         nargs=2,
         default=None,
     )
+    parser.add_argument(
+        "-i",
+        "--ignore",
+        metavar="ignore",
+        nargs=argparse.REMAINDER,
+        help="Artists to ignore on top songs/albums/artists"
+    )
     args = parser.parse_args()
     selected_year: int = args.year
     selected_type: str = args.type
     selected_range: int = args.range
     selected_first_played: int = args.first_played
     playlist_creation: bool = args.playlist
-    streams, song_pairs , artists, albums = readInStreams(selected_year)
+    ignore: str = args.ignore
+    streams, song_pairs , artists, albums = readInStreams(selected_year,ignore)
     if selected_first_played is not None:
         date, song, artist = firstTimePlayed(streams, selected_first_played[0], selected_first_played[1])
         print( str(song) + " by " + str(artist) + " - First Played: " + str(date))

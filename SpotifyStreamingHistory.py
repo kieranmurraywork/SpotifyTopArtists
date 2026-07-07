@@ -10,8 +10,9 @@ import pandas as pd
 from collections import Counter
 from dateutil.parser import parse
 import argparse
+from nicegui import ui
 
-def readInStreams(year, ignore): # function to open the Streaming_History_Audio_* files,
+def readInStreams(year): # function to open the Streaming_History_Audio_* files,
     directory = "Spotify Extended Streaming History"
     videodata = []
     data = []
@@ -45,8 +46,8 @@ def readInStreams(year, ignore): # function to open the Streaming_History_Audio_
             if stream['master_metadata_track_name'] is None or stream['master_metadata_album_artist_name'] is None or \
                     stream['master_metadata_album_album_name'] is None:
                 continue
-            if stream['master_metadata_album_artist_name'] in ignore:
-                continue
+        #    if stream['master_metadata_album_artist_name'] in ignore:
+        #        continue
             artists.append(stream['master_metadata_album_artist_name'])
             songs.append(stream['master_metadata_track_name'])
             albums.append(stream['master_metadata_album_album_name'])
@@ -60,8 +61,8 @@ def readInStreams(year, ignore): # function to open the Streaming_History_Audio_
             if stream['master_metadata_track_name'] is None or stream['master_metadata_album_artist_name'] is None or \
                     stream['master_metadata_album_album_name'] is None:
                 continue
-            if stream['master_metadata_album_artist_name'] in ignore:
-                continue
+        #    if stream['master_metadata_album_artist_name'] in ignore:
+        #        continue
             artists.append(stream['master_metadata_album_artist_name'])
             songs.append(stream['master_metadata_track_name'])
             albums.append(stream['master_metadata_album_album_name'])
@@ -70,12 +71,15 @@ def readInStreams(year, ignore): # function to open the Streaming_History_Audio_
             streams['artist'].append(stream['master_metadata_album_artist_name'])
             streams['date'].append(stream['ts'])
     song_pairs = list(zip(streams["song"], streams["artist"], streams["uri"]))
-    return streams, song_pairs, artists, albums
+    album_pairs = list(zip(streams["album"], streams["artist"], streams["uri"]))
+    return streams, song_pairs, artists, album_pairs
 
 def topArtists(artists, range):
+    topArtistsList = []
     top_list = Counter(artists).most_common(range)
     for artist, count in top_list:
         print(artist, count)
+        topArtistsList.append((artist, count))
     # WIP - figuring out how to display this data properly
     # artistImage = sp.search(q='artist:' + artist, type='artist')
     # img = url_to_image(artistImage['artists']['items'][0]['images'][0]['url'])
@@ -90,7 +94,8 @@ def topArtists(artists, range):
     plt.ylabel("Streams")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
-    plt.show()
+    #plt.show()
+    return topArtistsList
 
 def topSongs(songs, range, year, sp):
     uri_map = {}
@@ -124,7 +129,7 @@ def topSongs(songs, range, year, sp):
     averages = averages.astype("uint8")  # convert averages back to uint8
     outputImage = Image.fromarray(averages)  # create the image from the numpy array averages
     outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
-    outputImage.show()
+    #outputImage.show()
 
     df = pd.DataFrame(
         [(song, artist, count) for (song, artist), count in top_list],
@@ -136,16 +141,38 @@ def topSongs(songs, range, year, sp):
     plt.ylabel("Streams")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
-    plt.show()
+    #plt.show()
 
-    return uriList, outputImage
+    result = []
+    for (song, artist), count in top_list:
+        uri = uri_map[(song, artist)]
+        result.append(((song, artist, uri), count))
+
+    return result, outputImage
 
 
-def topAlbum(albums, range):
-    top_list = Counter(albums).most_common(range)
-    print("---- Top Albums ----")
+def topAlbum(albums, range, sp):
+    uri_map = {}
+    result = []
+    pairs = []
+    for album, artist, uri in albums:
+        uri_map[(album, artist)] = uri
+        pairs.append((album, artist))
+    top_list = Counter(pairs).most_common(range)
+    topAlbumsList = []
+    imageList = []
+    uriList = []
     for album, count in top_list:
-        print(album, count)
+        topAlbumsList.append((album[0], count))
+        cover = sp.track(uri_map[(album[0], album[1])])
+        url = cover["album"]["images"][0]["url"]
+        img = url_to_image(url)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        imageList.append(img.astype("uint8"))
+        uriList.append(uri_map[(album[0], album[1])])
+    print("---- Top Albums ----")
+    for item in enumerate(topAlbumsList):
+        print(item[0]+1, item[1][0], item[1][1] )
     df = pd.DataFrame(top_list, columns=["album", "count"])
     df.plot.bar(x="album", y="count", legend=False, figsize=(20, 10))
     plt.title("Top Albums")
@@ -153,7 +180,11 @@ def topAlbum(albums, range):
     plt.ylabel("Streams")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
-    plt.show()
+    #plt.show()
+    for (album, artist), count in top_list:
+        uri = uri_map[(album, artist)]
+        result.append(((album, artist, uri), count))
+    return result
 
 def firstTimePlayed(streams, song, artist):
     date = ""
@@ -223,7 +254,7 @@ def main():
     selected_first_played: int = args.first_played
     playlist_creation: bool = args.playlist
     ignore: str = args.ignore
-    streams, song_pairs , artists, albums = readInStreams(selected_year,ignore)
+    streams, song_pairs , artists, albums = readInStreams(selected_year)
     if selected_first_played is not None:
         date, song, artist = firstTimePlayed(streams, selected_first_played[0], selected_first_played[1])
         print( str(song) + " by " + str(artist) + " - First Played: " + str(date))
@@ -235,7 +266,6 @@ def main():
             if playlist_creation:
                 create_playlist(sp, uriList, outputImage, selected_range, selected_year)
         case "albums":
-            topAlbum(albums, selected_range)
-
+            topAlbum(albums, selected_range, sp)
 if __name__ == "__main__":
     main()

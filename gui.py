@@ -4,6 +4,7 @@ from typing import Final
 
 import SpotifyStreamingHistory
 from SpotifyStreamingHistory import *
+from nicegui import ui
 ANALYSIS_START_YEAR: Final[int] = 2014
 """
 def streams():

@@ -106,5 +106,5 @@ class MyGUI:
                 if playlist:
                     create_playlist(sp, uriList, outputImage, range, year)
             case "Albums":
-                topAlbum(sp, albums, range)
+                topAlbum(albums, range, sp)
 MyGUI()

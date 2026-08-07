@@ -6,7 +6,7 @@ from urllib import request
 import cv2
 import imageio
 import numpy as np
-from spotipy import Spotify
+from spotipy import Spotify, SpotifyException
 from matplotlib import pyplot as plt
 from dotenv import load_dotenv
 from PIL import Image
@@ -15,19 +15,36 @@ import base64
 import glob
 
 
-def create_spotify_client() -> Spotify:
-    """Create a Spotify API instance."""
+def create_spotify_client():
     load_dotenv(dotenv_path=".env")
-
-    return Spotify(
-        auth_manager=SpotifyOAuth(
-            client_id=os.getenv("SPOTIFY_CLIENT_ID"),
-            client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-            redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
-            scope="playlist-modify-public user-top-read ugc-image-upload playlist-modify-private",
-        )
+    cache_path = ".cache"
+    auth = SpotifyOAuth(
+        client_id=os.getenv("SPOTIFY_CLIENT_ID"),
+        client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+        redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
+        scope="playlist-modify-public user-top-read ugc-image-upload playlist-modify-private",
+        cache_path=cache_path,
     )
 
+    try:
+        token_info = auth.get_access_token()
+        return Spotify(auth_manager=auth)
+
+    except SpotifyException as e:
+        if "invalid_grant" in str(e):
+            print("Refresh token expired — deleting cache and reauthenticating.")
+            os.remove(cache_path)
+            auth = SpotifyOAuth(
+        client_id=os.getenv("SPOTIFY_CLIENT_ID"),
+        client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+        redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
+        scope="playlist-modify-public user-top-read ugc-image-upload playlist-modify-private",
+        cache_path=cache_path,
+        )
+            auth.get_access_token(as_dict=True)
+            return Spotify(auth_manager=auth)
+
+        raise
 
 def url_to_image(url) -> cv2.typing.MatLike:
     """Generate an image from a URL."""

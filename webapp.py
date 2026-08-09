@@ -3,8 +3,19 @@ from datetime import date
 import SpotifyStreamingHistory
 from SpotifyStreamingHistory import *
 
-ANALYSIS_START_YEAR = 2014
-
+# Code to determine start/end date for streaming data
+directory = "Spotify Extended Streaming History"
+files = sorted(os.listdir(directory))
+year = []
+for file in files:
+    if file.startswith("Streaming_History_Audio"):
+        year.append(int(file.split("_")[3].split(".")[0]))
+    if not year:
+        continue
+    first = min(year)
+    last = max(year)
+ANALYSIS_START_YEAR = first
+ANALYSIS_END_YEAR = last
 RESULT_DATA = {}
 RESULTS = {}
 RESULT_TYPE = ""
@@ -123,7 +134,7 @@ def home_page():
 
         with ui.column().classes("items-center w-full"):
             dataOption = ui.select(["Albums", "Artists", "Songs"], label="Data Type").classes("w-64")
-            yearOption = ui.select(list(range(ANALYSIS_START_YEAR, date.today().year + 1)) + ["all"], label="Year").classes("w-64")
+            yearOption = ui.select(list(range(ANALYSIS_START_YEAR, ANALYSIS_END_YEAR)) + ["all"], label="Year").classes("w-64")
             rangeOption = ui.input(label="Range", placeholder="Enter a number").classes("w-64")
             playlistOption = ui.checkbox("Create a Playlist?",value=False).classes("w-64")
 

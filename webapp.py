@@ -2,7 +2,6 @@ from nicegui import ui
 from datetime import date
 import SpotifyStreamingHistory
 from SpotifyStreamingHistory import *
-
 # Code to determine start/end date for streaming data
 directory = "Spotify Extended Streaming History"
 files = sorted(os.listdir(directory))
@@ -203,18 +202,18 @@ def results_page():
                 uri = get_artist_uri(sp, artist)
                 link = uri_to_link(uri) if uri else "#"
 
-                with ui.link(target=link,new_tab=True).classes("no-underline"):
-                    with ui.card().classes(
-                            "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
-                    ):
-                        with ui.row().classes("items-center gap-4 w-full"):
-                            if image_url:
-                                ui.image(image_url).classes("w-14 h-14 rounded-full")
+                with ui.card().classes(
+                        "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
+                ):
+                    with ui.row().classes("items-center gap-4 w-full"):
+                        if image_url:
+                            ui.image(image_url).classes("w-14 h-14 rounded-full")
 
-                            ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
-                            ui.label(artist).classes("font-bold text-[#1DB954] w-40 truncate")
-                            ui.label(f"{streams} streams").classes("opacity-60 ml-auto")
-
+                        ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
+                        ui.label(artist).classes("font-bold text-[#1DB954] w-40 truncate")
+                        ui.label(f"{streams} streams").classes("opacity-60 ml-auto")
+                    with ui.link(target=link, new_tab=True).classes("no-underline").style('color:white'):
+                        ui.button("Go To Spotify", color="#1DB954")
     # --- SONGS MODE ---
     elif RESULT_TYPE == "songs":
         album_covers = []
@@ -222,34 +221,39 @@ def results_page():
             cover_url = get_album_cover(sp, uri)
             link = uri_to_link(uri)
             album_covers.append(cover_url)
-            with ui.link(target=link,new_tab=True).classes("no-underline"):
-                with ui.card().classes(
-                        "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
-                ):
-                    with ui.row().classes("items-center gap-4 w-full"):
-                        ui.image(cover_url).classes("w-14 h-14 rounded")
-                        ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
-                        ui.label(song).classes("font-bold text-[#1DB954] w-40 truncate")
-                        ui.label(artist).classes("opacity-80 w-32 truncate")
-                        ui.label(f"{streams} streams").classes("opacity-60 ml-auto")
-        ui.button("Generate Collage", on_click=lambda: (ui.label("Generated Collage:"), ui.image(get_collage(album_covers))), color="#1DB954")
+            with ui.card().classes(
+                    "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
+            ):
+                with ui.row().classes("items-center gap-4 w-full"):
+                    ui.image(cover_url).classes("w-14 h-14 rounded")
+                    ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
+                    ui.label(song).classes("font-bold text-[#1DB954] w-40 truncate")
+                    ui.label(artist).classes("opacity-80 w-32 truncate")
+                    ui.label(f"{streams} streams").classes("opacity-60 ml-auto")
+                with ui.link(target=link,new_tab=True).classes("no-underline").style('color:white'):
+                    ui.button("Go To Spotify",color="#1DB954",)
+        with ui.dialog() as dialog, ui.card().style('width: 600px; max-width: none'):
+            ui.label("Generated Collage")
+            ui.image(get_collage(album_covers))
+
+        ui.button("Generate Collage", on_click=lambda:dialog.open(), color="#1DB954")
     # --- ALBUMS MODE ---
     elif RESULT_TYPE == "albums":
         for i, ((album, artist, uri), streams) in enumerate(RESULT_DATA, start=1):
             album_link = uri_to_link(get_album_uri_from_track(sp, uri))
             cover_url = get_album_cover(sp, uri)
 
-            with ui.link(target=album_link, new_tab=True).classes("no-underline"):
-                with ui.card().classes(
-                        "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
-                ):
-                    with ui.row().classes("items-center gap-4 w-full"):
-                        ui.image(cover_url).classes("w-14 h-14 rounded")
-                        ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
-                        ui.label(album).classes("font-bold text-[#1DB954] w-40 truncate")
-                        ui.label(artist).classes("opacity-80 w-32 truncate")
-                        ui.label(f"{streams} streams").classes("opacity-60 ml-auto")
-
+            with ui.card().classes(
+                    "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
+            ):
+                with ui.row().classes("items-center gap-4 w-full"):
+                    ui.image(cover_url).classes("w-14 h-14 rounded")
+                    ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
+                    ui.label(album).classes("font-bold text-[#1DB954] w-40 truncate")
+                    ui.label(artist).classes("opacity-80 w-32 truncate")
+                    ui.label(f"{streams} streams").classes("opacity-60 ml-auto")
+                with ui.link(target=album_link,new_tab=True).classes("no-underline").style('color:white'):
+                    ui.button("Go To Spotify",color="#1DB954",)
     ui.button("Back", on_click=lambda: ui.navigate.to('/'), color="#1DB954")
 
 

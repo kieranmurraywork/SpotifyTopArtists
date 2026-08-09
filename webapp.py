@@ -14,12 +14,15 @@ for file in files:
         continue
     first = min(year)
     last = max(year)
+# Global variable assignments
 ANALYSIS_START_YEAR = first
 ANALYSIS_END_YEAR = last
 RESULT_DATA = {}
 RESULTS = {}
 RESULT_TYPE = ""
+# Spotify API Client initilisation
 sp = SpotifyStreamingHistory.create_spotify_client()
+# Homepage initialisation and design creation
 @ui.page('/')
 def home_page():
     ui.add_head_html("""
@@ -73,10 +76,11 @@ def home_page():
     }
     </style>
     """)
+    #Start page initialisation
     def start_app():
         welcome.classes(add="opacity-0")
         ui.timer(0.7, lambda: main_ui.classes(remove="hidden opacity-0"), once=True)
-
+    #Stream ingestion code
     def streamsSetup():
         nonlocal dataOption, rangeOption, yearOption, playlistOption
         global RESULT_DATA
@@ -139,38 +143,57 @@ def home_page():
             playlistOption = ui.checkbox("Create a Playlist?",value=False).classes("w-64")
 
             ui.button("Read in Streams", on_click=streamsSetup, color="#1DB954")
-
+# Results page initialisation
 @ui.page('/results')
 def results_page():
+    # Calls spotify api to return the album cover
     def get_album_cover(sp, track_uri):
         track = sp.track(track_uri)
         return track["album"]["images"][0]["url"]  # highest resolution
-
+    # Calls the spotify api to return the artists spotify URI
     def get_artist_uri(sp, artist_name):
         results = sp.search(q=f"artist:{artist_name}", type="artist", limit=1)
         items = results["artists"]["items"]
         if not items:
             return None
         return items[0]["uri"]
-
+    # Returns the artists spotify portrait from the spotify api
     def get_artist_image(sp, artist_name):
         results = sp.search(q=f"artist:{artist_name}", type="artist", limit=1)
         items = results["artists"]["items"]
         if not items:
             return None
         return items[0]["images"][0]["url"]  # highest resolution
-
+    # Creates a url link from the uri to allow the user to access the songs from the webapp
     def uri_to_link(uri: str) -> str:
         parts = uri.split(':')  # ['spotify', 'track', '4pvb0WLRcMtbPGmtejJJ6y']
         if len(parts) != 3:
             return "#"  # or raise an error
         _, kind, id_ = parts
         return f"https://open.spotify.com/{kind}/{id_}"
-
+    # Returns the album uri when given a spotify track uri
     def get_album_uri_from_track(sp, track_uri):
         track = sp.track(track_uri)
         return track["album"]["uri"]
 
+    def get_collage(covers):
+        images = []
+        range = len(covers)
+        for cover in covers:
+            images.append(url_to_image(cover))
+        print(covers)
+        j = 0  # intialises a counter for moving through the songs
+        averages = images[j]  # initialises averages to be the numpy array of the first photo
+        while j < range - 1:  # While the counter is less than the length of the number of images:
+            readInFile = images[j + 1]  # read in the value of the next photo in the list
+            readInFileFixed = np.resize(readInFile, (640, 640, 3))
+            averages = averages.astype(int) + readInFileFixed.astype(int)  # combine the values of both numpy arrays
+            j += 1  # increment j
+        averages = averages / len(images)  # find the average by dividing by the number of images
+        averages = averages.astype("uint8")  # convert averages back to uint8
+        outputImage = Image.fromarray(averages)
+        outputImage.show()
+        return outputImage
     # --- ARTISTS MODE ---
     if RESULT_TYPE == "artists":
         ui.label("Top Artists")
@@ -194,10 +217,11 @@ def results_page():
 
     # --- SONGS MODE ---
     elif RESULT_TYPE == "songs":
+        album_covers = []
         for i, ((song, artist, uri), streams) in enumerate(RESULT_DATA, start=1):
             cover_url = get_album_cover(sp, uri)
             link = uri_to_link(uri)
-
+            album_covers.append(cover_url)
             with ui.link(target=link,new_tab=True).classes("no-underline"):
                 with ui.card().classes(
                         "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
@@ -208,6 +232,7 @@ def results_page():
                         ui.label(song).classes("font-bold text-[#1DB954] w-40 truncate")
                         ui.label(artist).classes("opacity-80 w-32 truncate")
                         ui.label(f"{streams} streams").classes("opacity-60 ml-auto")
+        ui.button("Generate Collage", on_click=lambda: (ui.label("Generated Collage:"), ui.image(get_collage(album_covers))), color="#1DB954")
     # --- ALBUMS MODE ---
     elif RESULT_TYPE == "albums":
         for i, ((album, artist, uri), streams) in enumerate(RESULT_DATA, start=1):

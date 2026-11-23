@@ -9,6 +9,10 @@
 __pycache__/
 .cache
 .ruff_cache/
+.nicegui/
+history_cache.parquet
+history_cache.json
+spotify_lookup_cache.json
 gridnew.jpg
 image.gif
 movie.mp4

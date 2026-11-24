@@ -102,9 +102,10 @@ class MyGUI:
             case "Artists":
                 topArtists(artists, range)
             case "Songs":
-                uriList, outputImage = topSongs(song_pairs, range, year, sp)
+                topSongList, outputImage = topSongs(song_pairs, range, year, sp)
                 if playlist:
-                    create_playlist(sp, uriList, outputImage, range, year)
+                    uris = [uri for (_, _, uri), _ in topSongList if uri]
+                    create_playlist(sp, uris, outputImage, range, year)
             case "Albums":
                 topAlbum(albums, range, sp)
 MyGUI()

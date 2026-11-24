@@ -1,4 +1,5 @@
 import contextlib
+import math
 import os
 from io import BytesIO
 from urllib import request
@@ -56,26 +57,57 @@ def url_to_image(url) -> cv2.typing.MatLike:
         raise ValueError("cv2.imdecode failed to create an image.")
 
     return image
-def create_playlist(sp, results,playlistCover,range,coverage):
-    """Create a playlist"""
+
+
+def download_covers(urls, workers=8):
+    """Download several cover images at once (in parallel), keeping their order."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(url_to_image, urls))
+
+
+COVER_SIZE = 640  # every cover is scaled to COVER_SIZE x COVER_SIZE before being combined
+
+
+def cover_to_rgb(image, size=COVER_SIZE):
+    """Scale an OpenCV (BGR) cover to size x size and convert it to RGB."""
+    image = cv2.resize(image, (size, size), interpolation=cv2.INTER_AREA)
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+
+def average_image(images):
+    """Pixel-wise average of RGB covers, returned as a PIL image.
+
+    Each image is scaled to COVER_SIZE first so covers of different sizes line up.
+    """
+    if not images:
+        raise ValueError("No images to average.")
+    resized = [cv2.resize(img, (COVER_SIZE, COVER_SIZE), interpolation=cv2.INTER_AREA) for img in images]
+    averages = np.mean(np.stack(resized).astype(np.float64), axis=0)
+    return Image.fromarray(averages.astype("uint8"))
+
+
+def create_playlist(sp, results, playlistCover, count, coverage):
+    """Create a playlist.
+
+    results is either a current_user_top_tracks response, or a plain list of track URIs.
+    """
     username = sp.me()['id']
-    track = []
-    tracksList = []
-    if "items" in results:
-        ids = results["items"]
-        for items in ids:
-            tracksList.append(items["id"])
-        playlistName = f"{username}'s Top {range} Songs Generated - {coverage}"
+    if isinstance(results, dict) and "items" in results:
+        track = [item["id"] for item in results["items"]]
+        playlistName = f"{username}'s Top {count} Songs Generated - {coverage}"
     else:
-        tracksList = results
+        track = list(results)
         if coverage == "all":
-            playlistName = f"{username}'s Top {range} Songs of All Time"
+            playlistName = f"{username}'s Top {count} Songs of All Time"
         else:
-            playlistName = f"{username}'s Top {range} Songs of {coverage}"
+            playlistName = f"{username}'s Top {count} Songs of {coverage}"
     playlist = sp.user_playlist_create(name=playlistName,public=True,user=username)
-    for result in tracksList:
-        track.append(result)
-    sp.playlist_add_items(playlist["id"],track,position=None)
+    # Spotify accepts at most 100 tracks per request
+    for start in range(0, len(track), 100):
+        sp.playlist_add_items(playlist["id"], track[start:start + 100], position=None)
+    if playlistCover is None:
+        return
     playlistFile = BytesIO()
     playlistCover.save(playlistFile, format="jpeg")
     playlistBytes = playlistFile.getvalue()
@@ -130,18 +162,13 @@ def main():
     parser.add_argument(
         "-p",
         "--playlist",
-        metavar="playlist",
-        type = bool,
-        default = False,
-        help = "Generate a playlist for the top 50 songs (default: False)")
+        action="store_true",
+        help="Generate a playlist for your top songs")
     parser.add_argument(
         "-s",
         "--slideshow",
-        metavar="slideshow",
-        type = bool,
-        default = False,
-        help = "Generate a slideshow for the top 50 songs (default: False)"
-        )
+        action="store_true",
+        help="Generate a slideshow for your top songs")
 
     args = parser.parse_args()
 
@@ -158,70 +185,44 @@ def main():
     )  # Returns the top songs with the corresponding timeframe up to the limit
     if results is None:
         raise ValueError("sp.current_user_top_tracks failed to generate any results.")
-    i = 0
-    for i, item in enumerate(results["items"]):  # For each track in results:
-        url = item["album"]["images"][0]["url"]  # Gets the url for the song's cover art
-        img = url_to_image(
-            url
-        )  # calls url_to_image and returns the numpy array of the image
+    # Cover URLs for each track (local files have no cover art, so they're skipped)
+    urls = [item["album"]["images"][0]["url"] for item in results["items"] if item["album"]["images"]]
+    for img in download_covers(urls):  # numpy arrays of the covers (BGR), downloaded in parallel
         ##### Below line is for placing the name of the song ontop of the cover art #####
         # cv2.putText(img,f"{item['name']}", (0,550),fontFace=2, fontScale=2, color=(255,255,255), thickness=2)
-        imageList.append(img.astype("uint8"))  # Adds the current image to imageList
-
+        imageList.append(cover_to_rgb(img))  # same size, RGB, so they can be combined
+    if not imageList:
+        raise ValueError("None of your top tracks had cover art.")
 
     # Config:
-    images_dir = "./Top Songs"  # Directory for reading the images in for the grid photo
-    result_grid_filename = "./gridnew.jpg"  # Filename for the rsulting collage
-    result_figsize_resolution = 40  # 1 = 100px # sets the resolution
+    result_grid_filename = "./gridnew.jpg"  # Filename for the resulting collage
+    cell_inches = 4  # size of each cover in the grid (1 inch = 100px)
 
-    # Create plt plot:
+    # Grid size follows the number of covers, e.g. 50 covers -> 8 columns x 7 rows
+    columns = math.ceil(math.sqrt(len(imageList)))
+    rows = math.ceil(len(imageList) / columns)
     fig, axes = plt.subplots(
-        7,
-        8,
-        figsize=(result_figsize_resolution, result_figsize_resolution),
-        sharex=True,
-        sharey=True,
+        rows,
+        columns,
+        figsize=(columns * cell_inches, rows * cell_inches),
+        squeeze=False,
     )
-
-    current_file_number = 0
-    while current_file_number < len(imageList):
-        y_position = current_file_number % 8
-        x_position = current_file_number // 8
-        imageList[current_file_number] = cv2.cvtColor(
-            imageList[current_file_number], cv2.COLOR_BGR2RGB
-        )  # flip from BGR to RGB
-        plt_image = Image.fromarray(imageList[current_file_number])
-        axes[x_position, y_position].imshow(plt_image)
-        axes[x_position, y_position].axis("off")
-
-        current_file_number += 1
+    for position, ax in enumerate(axes.flat):
+        ax.axis("off")
+        if position < len(imageList):
+            ax.imshow(imageList[position])
 
     plt.subplots_adjust(
         left=0.0, right=1.0, bottom=0.0, top=1.0, wspace=0.0, hspace=0.0
     )
     plt.savefig(result_grid_filename)
 
-    j = 0  # intialises a counter for moving through the songs
-    averages = imageList[
-        j
-    ]  # initialises averages to be the numpy array of the first photo
-    while j < i:  # While the counter is less than the length of the number of images:
-        readInFile = imageList[j+1]  # read in the value of the next photo in the list
-        readInFileFixed = np.resize(readInFile,(640 ,640 ,3))
-        averages = averages.astype(int) + readInFileFixed.astype(int)  # combine the values of both numpy arrays
-        j += 1  # increment j
-    averages = averages / len(
-        imageList
-    )  # find the average by dividing by the number of images
-    averages = averages.astype("uint8")  # convert averages back to uint8
-    outputImage = Image.fromarray(
-        averages
-    )  # create the image from the numpy array averages
+    outputImage = average_image(imageList)
     outputImage.save("Top Song Average New.jpg")  # save the image as a jpg
     outputImage.show()  # display the image
-    if selected_playlist==True:
+    if selected_playlist:
         create_playlist(sp, results,outputImage,selected_limit,selected_range)
-    if selected_slideshow==True:
+    if selected_slideshow:
         create_slideshow(imageList)
 
 

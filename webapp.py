@@ -1,24 +1,19 @@
-from nicegui import ui
-from datetime import date
+import os
+import secrets
+
+from nicegui import app, ui
+
 import SpotifyStreamingHistory
-from SpotifyStreamingHistory import *
-# Code to determine start/end date for streaming data
-directory = "Spotify Extended Streaming History"
-files = sorted(os.listdir(directory))
-year = []
-for file in files:
-    if file.startswith("Streaming_History_Audio"):
-        year.append(int(file.split("_")[3].split(".")[0]))
-    if not year:
-        continue
-    first = min(year)
-    last = max(year)
-# Global variable assignments
-ANALYSIS_START_YEAR = first
-ANALYSIS_END_YEAR = last
-RESULT_DATA = {}
-RESULTS = {}
-RESULT_TYPE = ""
+from SpotifyStreamingHistory import available_years, topAlbum, topArtists, topSongs
+from main import average_image, cover_to_rgb, create_playlist, download_covers
+from spotify_lookup import artist_details, track_details
+
+# Years offered in the dropdown, taken from the history files (includes the latest year)
+YEARS = available_years()
+# Load the history once at startup; each "Read in Streams" click then reuses it from memory.
+SpotifyStreamingHistory.load_history()
+# Each browser keeps its own results in app.storage.user, so two people using
+# the app at once don't overwrite each other's results.
 # Spotify API Client initilisation
 sp = SpotifyStreamingHistory.create_spotify_client()
 # Homepage initialisation and design creation
@@ -81,39 +76,39 @@ def home_page():
         ui.timer(0.7, lambda: main_ui.classes(remove="hidden opacity-0"), once=True)
     #Stream ingestion code
     def streamsSetup():
-        nonlocal dataOption, rangeOption, yearOption, playlistOption
-        global RESULT_DATA
-        global RESULTS
-        global RESULT_TYPE
-        global songuri
-
         type_ = dataOption.value
-        range_ = int(rangeOption.value)
         year = yearOption.value
         playlist = playlistOption.value
+        try:
+            range_ = int(rangeOption.value)
+        except (TypeError, ValueError):
+            range_ = 0
+        if not type_ or year is None or range_ < 1:
+            ui.notify("Choose a data type and year, and enter a range of 1 or more.", type="warning")
+            return
 
-        sp = SpotifyStreamingHistory.create_spotify_client()
         streams, song_pairs, artists, albums = SpotifyStreamingHistory.readInStreams(year)
-        songuri = []
+        # plot=False: the web app doesn't show the matplotlib charts, so don't draw them
         match type_:
             case "Artists":
-                RESULT_DATA = topArtists(artists, range_)
-                print(RESULT_DATA)
-                RESULT_TYPE = "artists"
+                result_data = topArtists(artists, range_, plot=False)
+                result_type = "artists"
 
             case "Songs":
-                RESULT_DATA, outputImage = topSongs(song_pairs, range_, year, sp)
-                for ((song, artist, uri), count) in RESULT_DATA:
-                    songuri.append(uri)
-                RESULT_TYPE = "songs"
+                # covers are only downloaded when they're needed for the playlist image
+                result_data, outputImage = topSongs(song_pairs, range_, year, sp,
+                                                    make_cover=playlist, plot=False)
+                result_type = "songs"
                 if playlist:
-                    create_playlist(sp, songuri, outputImage, range_, year )
+                    songuri = [uri for ((song, artist, uri), count) in result_data if uri]
+                    create_playlist(sp, songuri, outputImage, range_, year)
 
             case "Albums":
-                RESULT_DATA = topAlbum(albums, range_, sp)
-                print(RESULT_DATA)
-                RESULT_TYPE = "albums"
+                result_data = topAlbum(albums, range_, sp, plot=False)
+                result_type = "albums"
 
+        app.storage.user["result_data"] = result_data
+        app.storage.user["result_type"] = result_type
         ui.navigate.to('/results')
 
     # --- WELCOME SCREEN ---
@@ -137,7 +132,7 @@ def home_page():
 
         with ui.column().classes("items-center w-full"):
             dataOption = ui.select(["Albums", "Artists", "Songs"], label="Data Type").classes("w-64")
-            yearOption = ui.select(list(range(ANALYSIS_START_YEAR, ANALYSIS_END_YEAR)) + ["all"], label="Year").classes("w-64")
+            yearOption = ui.select(YEARS + ["all"], label="Year").classes("w-64")
             rangeOption = ui.input(label="Range", placeholder="Enter a number").classes("w-64")
             playlistOption = ui.checkbox("Create a Playlist?",value=False).classes("w-64")
 
@@ -145,61 +140,42 @@ def home_page():
 # Results page initialisation
 @ui.page('/results')
 def results_page():
-    # Calls spotify api to return the album cover
-    def get_album_cover(sp, track_uri):
-        track = sp.track(track_uri)
-        return track["album"]["images"][0]["url"]  # highest resolution
-    # Calls the spotify api to return the artists spotify URI
-    def get_artist_uri(sp, artist_name):
-        results = sp.search(q=f"artist:{artist_name}", type="artist", limit=1)
-        items = results["artists"]["items"]
-        if not items:
-            return None
-        return items[0]["uri"]
-    # Returns the artists spotify portrait from the spotify api
-    def get_artist_image(sp, artist_name):
-        results = sp.search(q=f"artist:{artist_name}", type="artist", limit=1)
-        items = results["artists"]["items"]
-        if not items:
-            return None
-        return items[0]["images"][0]["url"]  # highest resolution
+    RESULT_DATA = app.storage.user.get("result_data", [])
+    RESULT_TYPE = app.storage.user.get("result_type", "")
+
+    # All Spotify lookups for the page happen up front: tracks in batches of 50, artists in
+    # parallel, and anything looked up before comes straight from the cache.
+    if RESULT_TYPE in ("songs", "albums"):
+        tracks = track_details(sp, [uri for ((_, _, uri), _) in RESULT_DATA])
+    elif RESULT_TYPE == "artists":
+        artist_info = artist_details(sp, [artist for (artist, _) in RESULT_DATA])
+
+    # Album cover for a track, from the batched lookup
+    def get_album_cover(track_uri):
+        return tracks.get(track_uri, {}).get("cover")
     # Creates a url link from the uri to allow the user to access the songs from the webapp
     def uri_to_link(uri: str) -> str:
+        if not uri:
+            return "#"
         parts = uri.split(':')  # ['spotify', 'track', '4pvb0WLRcMtbPGmtejJJ6y']
         if len(parts) != 3:
             return "#"  # or raise an error
         _, kind, id_ = parts
         return f"https://open.spotify.com/{kind}/{id_}"
     # Returns the album uri when given a spotify track uri
-    def get_album_uri_from_track(sp, track_uri):
-        track = sp.track(track_uri)
-        return track["album"]["uri"]
+    def get_album_uri_from_track(track_uri):
+        return tracks.get(track_uri, {}).get("album_uri")
 
     def get_collage(covers):
-        images = []
-        range = len(covers)
-        for cover in covers:
-            images.append(url_to_image(cover))
-        print(covers)
-        j = 0  # intialises a counter for moving through the songs
-        averages = images[j]  # initialises averages to be the numpy array of the first photo
-        while j < range - 1:  # While the counter is less than the length of the number of images:
-            readInFile = images[j + 1]  # read in the value of the next photo in the list
-            readInFileFixed = np.resize(readInFile, (640, 640, 3))
-            averages = averages.astype(int) + readInFileFixed.astype(int)  # combine the values of both numpy arrays
-            j += 1  # increment j
-        averages = averages / len(images)  # find the average by dividing by the number of images
-        averages = averages.astype("uint8")  # convert averages back to uint8
-        outputImage = Image.fromarray(averages)
-        outputImage.show()
-        return outputImage
+        """Average of the given cover URLs, as a PIL image for display in the browser."""
+        return average_image([cover_to_rgb(img) for img in download_covers(covers)])
     # --- ARTISTS MODE ---
     if RESULT_TYPE == "artists":
         ui.label("Top Artists")
         with ui.row().classes("flex-wrap gap-0 justify-center"):
             for i, (artist, streams) in enumerate(RESULT_DATA, start=1):
-                image_url = get_artist_image(sp, artist)
-                uri = get_artist_uri(sp, artist)
+                image_url = artist_info[artist]["image"]
+                uri = artist_info[artist]["uri"]
                 link = uri_to_link(uri) if uri else "#"
 
                 with ui.card().classes(
@@ -218,14 +194,16 @@ def results_page():
     elif RESULT_TYPE == "songs":
         album_covers = []
         for i, ((song, artist, uri), streams) in enumerate(RESULT_DATA, start=1):
-            cover_url = get_album_cover(sp, uri)
+            cover_url = get_album_cover(uri)
             link = uri_to_link(uri)
-            album_covers.append(cover_url)
+            if cover_url:
+                album_covers.append(cover_url)
             with ui.card().classes(
                     "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
             ):
                 with ui.row().classes("items-center gap-4 w-full"):
-                    ui.image(cover_url).classes("w-14 h-14 rounded")
+                    if cover_url:
+                        ui.image(cover_url).classes("w-14 h-14 rounded")
                     ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
                     ui.label(song).classes("font-bold text-[#1DB954] w-40 truncate")
                     ui.label(artist).classes("opacity-80 w-32 truncate")
@@ -234,20 +212,29 @@ def results_page():
                     ui.button("Go To Spotify",color="#1DB954",)
         with ui.dialog() as dialog, ui.card().style('width: 600px; max-width: none'):
             ui.label("Generated Collage")
-            ui.image(get_collage(album_covers))
+            collage = ui.image().classes("w-full")
 
-        ui.button("Generate Collage", on_click=lambda:dialog.open(), color="#1DB954")
+        def show_collage():
+            # Built only when asked for, and shown in the browser rather than on the server
+            if not album_covers:
+                ui.notify("None of these songs have cover art.", type="warning")
+                return
+            collage.set_source(get_collage(album_covers))
+            dialog.open()
+
+        ui.button("Generate Collage", on_click=show_collage, color="#1DB954")
     # --- ALBUMS MODE ---
     elif RESULT_TYPE == "albums":
         for i, ((album, artist, uri), streams) in enumerate(RESULT_DATA, start=1):
-            album_link = uri_to_link(get_album_uri_from_track(sp, uri))
-            cover_url = get_album_cover(sp, uri)
+            album_link = uri_to_link(get_album_uri_from_track(uri))
+            cover_url = get_album_cover(uri)
 
             with ui.card().classes(
                     "w-1/2 bg-[#121212] text-white mb-3 p-3 border border-[#1DB95433] hover:bg-[#1DB95422] transition"
             ):
                 with ui.row().classes("items-center gap-4 w-full"):
-                    ui.image(cover_url).classes("w-14 h-14 rounded")
+                    if cover_url:
+                        ui.image(cover_url).classes("w-14 h-14 rounded")
                     ui.label(str(i)).classes("text-xl font-bold text-[#1DB954] w-8 text-center")
                     ui.label(album).classes("font-bold text-[#1DB954] w-40 truncate")
                     ui.label(artist).classes("opacity-80 w-32 truncate")
@@ -257,4 +244,6 @@ def results_page():
     ui.button("Back", on_click=lambda: ui.navigate.to('/'), color="#1DB954")
 
 
-ui.run(dark=True)
+# storage_secret signs the per-browser storage cookie. Set NICEGUI_STORAGE_SECRET in .env
+# to keep sessions across restarts; otherwise a new random secret is used each run.
+ui.run(dark=True, storage_secret=os.getenv("NICEGUI_STORAGE_SECRET") or secrets.token_hex(32))
